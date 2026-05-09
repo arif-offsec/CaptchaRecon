@@ -354,13 +354,6 @@ prompt at startup is mandatory.
 
 ---
 
-## Author
-
-**Ariful Islam Mazumdar**
-GitHub: [arif-offsec](https://github.com/arif-offsec)
-
----
-
 ## Contributing
 
 Pull requests are welcome. If you find a new CAPTCHA provider, WAF signature,
