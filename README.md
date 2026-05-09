@@ -32,6 +32,107 @@ It does **NOT** solve, bypass, or interact with any CAPTCHA.
 
 ---
 
+## What Happens When You Run It
+
+Before installing and testing this tool, you need to understand exactly what it
+does from the moment you press Enter. This is a security tool that requires
+**authorised access** to the target — so understanding the full execution flow
+is not optional.
+
+When you run:
+
+```bash
+captcharecon -u https://target.com/login
+```
+
+Here is what happens, in order:
+
+**Step 1 — Banner**
+The ASCII logo prints with the version number and licence line.
+
+**Step 2 — Ethics prompt (mandatory)**
+```
+⚠  AUTHORISED USE ONLY
+Do you have explicit authorisation to test the target? [y/N]:
+```
+Type `y` to continue. Anything else exits immediately. This prompt cannot be
+suppressed or bypassed.
+
+**Step 3 — Session summary prints**
+```
+Target : https://target.com/login
+Modules: detect, resilience, ratelimit, antibot
+Delay  : 1.0s per request
+```
+
+**Step 4 — Module 1: CAPTCHA Fingerprinting (`detect`)**
+- Fetches the page with a GET request
+- Parses the full HTML source and collects all script `src` attributes and inline JavaScript
+- Checks everything against 8 CAPTCHA provider signatures — HTML patterns, script URLs, JS function names
+- Tries to extract any exposed sitekey from the HTML source
+- Prints a table: CAPTCHA type, risk level, sitekey if found, notes
+- If nothing found: prints "No known CAPTCHA detected"
+
+Does NOT interact with or trigger any CAPTCHA.
+
+**Step 5 — Module 2: Resilience Testing (`resilience`)**
+- Fetches the page and finds all `<form>` elements
+- For each form, runs 5 checks:
+  - Is there a CAPTCHA response field in the form inputs at all?
+  - What does the server return if you submit with an empty CAPTCHA token?
+  - What does the server return if you remove the CAPTCHA field entirely?
+  - Are there low-entropy or predictable token patterns in the HTML?
+  - Are there honeypot fields hidden via CSS?
+- Prints findings with severity: High, Medium, Low, or Info
+
+**Step 6 — Module 3: Rate Limit Analysis (`ratelimit`)**
+- Sends a HEAD request and checks response headers for `X-RateLimit-*`, `Retry-After`, and related headers
+- Sends 10 rapid GET requests (configurable) and records every status code
+- Analyses response timing: min, max, mean, standard deviation
+- Detects soft throttling if response time rises significantly mid-session
+- Tests 9 IP spoofing headers one by one: `X-Forwarded-For`, `X-Real-IP`,
+  `CF-Connecting-IP`, `True-Client-IP`, `X-Originating-IP`, `X-Remote-IP`,
+  `X-Client-IP`, `Forwarded`, and others
+- If any header causes the response code to change — flags it as High severity
+- Prints status code distribution table and timing summary
+
+**Step 7 — Module 4: Anti-Automation Stack Mapping (`antibot`)**
+- Fetches the page and inspects response headers, cookies, and script sources
+- Checks against WAF/CDN signatures: Cloudflare, Akamai, AWS WAF/CloudFront,
+  Imperva Incapsula, F5 BIG-IP ASM, ModSecurity, Sucuri
+- Checks against bot management signatures: DataDome, PerimeterX/HUMAN,
+  Cloudflare Bot Management, Kasada, Akamai Bot Manager, Radware, Shape Security/F5
+- Scans scripts for fingerprinting libraries: FingerprintJS, ThreatMetrix,
+  Sift Science, Mouseflow, Hotjar, FullStory
+- Checks 6 security headers: CSP, HSTS, X-Frame-Options, X-Content-Type-Options,
+  Referrer-Policy, Permissions-Policy
+- Prints separate tables for each category
+
+**Step 8 — Summary table with remediation**
+
+One consolidated table across all four modules, sorted by severity, with a
+remediation tag on every row:
+
+```
+Module                   Result                        Severity   Remediation
+Resilience Testing       2 high-severity weakness(es)  High       → Enforce server-side token validation
+Rate Limit Analysis      No rate limit triggered        Medium     → Implement lockout after 3-5 attempts
+Anti-Automation Mapping  No WAF or bot management       Medium     → Place behind WAF/CDN (Cloudflare, AWS WAF)
+CAPTCHA Fingerprinting   1 CAPTCHA type(s) found        Low        → Verify server-side validation enforced
+```
+
+Below the table, a **Remediation Detail** section expands each tag into full
+technical steps — one numbered block per finding, in the same priority order.
+Sorted highest severity first so the most critical items are always at the top.
+
+**Step 9 — Done**
+
+If you passed `--output report.json`, the full JSON report is written at this point.
+
+Total time on a typical login page with default 1.0s delay: roughly 30 to 60 seconds.
+
+---
+
 ## Modules
 
 | Module | What it does |
@@ -171,9 +272,10 @@ Hotjar, FullStory
 ## Output
 
 ### Terminal
-Rich-formatted tables with colour-coded severity — CRITICAL, HIGH, MEDIUM, LOW, INFO.
+Rich-formatted tables with colour-coded severity — HIGH, MEDIUM, LOW, INFO.
 
 ### JSON
+
 ```bash
 captcharecon -u https://target.com/login --output findings.json
 ```
@@ -186,10 +288,10 @@ captcharecon -u https://target.com/login --output findings.json
   "timestamp": "2025-04-26T10:00:00Z",
   "target": "https://target.com/login",
   "modules": {
-    "detect":     { "captcha_found": true, "findings": [...] },
-    "resilience": { "forms_tested": 1,     "findings": [...] },
-    "ratelimit":  { "rate_limited": false,  "bypass_findings": [...] },
-    "antibot":    { "waf": [...],           "security_headers": {...} }
+    "detect":     { "captcha_found": true, "findings": [] },
+    "resilience": { "forms_tested": 1,     "findings": [] },
+    "ratelimit":  { "rate_limited": false,  "bypass_findings": [] },
+    "antibot":    { "waf": [],             "security_headers": {} }
   }
 }
 ```
@@ -207,9 +309,6 @@ captcharecon -u https://target.com/login --proxy http://127.0.0.1:8080
 # OWASP ZAP
 captcharecon -u https://target.com/login --proxy http://127.0.0.1:8090
 ```
-
-When testing HTTPS targets through an intercepting proxy, ensure the proxy
-CA certificate is installed in the system trust store.
 
 ---
 
@@ -252,6 +351,13 @@ This tool is designed for:
 Misuse may violate the Computer Fraud and Abuse Act (CFAA), the Computer Misuse
 Act, and equivalent legislation in other jurisdictions. The ethics acknowledgement
 prompt at startup is mandatory.
+
+---
+
+## Author
+
+**Ariful Islam Mazumdar**
+GitHub: [arif-offsec](https://github.com/arif-offsec)
 
 ---
 
