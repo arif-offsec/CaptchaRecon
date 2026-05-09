@@ -1,0 +1,253 @@
+.\" CaptchaRecon man page
+.\" Run: groff -man -Tascii captcharecon.1 | less
+.TH CAPTCHARECON 1 "2025" "1.0.0" "CaptchaRecon Manual"
+
+.SH NAME
+captcharecon \- CAPTCHA and Anti-Automation Reconnaissance Toolkit
+
+.SH SYNOPSIS
+.B captcharecon
+.BI "\-u " URL
+.RB [ \-\-modules
+.IR module... ]
+.RB [ \-\-full ]
+.RB [ \-\-output
+.IR FILE ]
+.RB [ \-\-proxy
+.IR URL ]
+.RB [ \-\-delay
+.IR SECS ]
+.RB [ \-\-timeout
+.IR SECS ]
+.RB [ \-\-ratelimit\-requests
+.IR N ]
+.RB [ \-\-user\-agent
+.IR UA ]
+.RB [ \-v ]
+
+.SH DESCRIPTION
+.B captcharecon
+is a modular reconnaissance and analysis tool for authorised web application
+penetration testers. It maps the anti-automation defence stack of a target
+application without attempting to bypass any CAPTCHA.
+
+It combines four capabilities:
+
+.TP
+.B CAPTCHA Fingerprinting
+Identifies CAPTCHA type, version, provider, and configuration leaks
+(sitekeys, action names) by analysing HTML source and JavaScript.
+
+.TP
+.B Resilience Testing
+Tests CAPTCHA implementation weaknesses — missing server-side validation,
+empty token submission, field removal, low-entropy tokens, and honeypot
+field detection.
+
+.TP
+.B Rate Limit Analysis
+Probes throttling mechanisms, header-based rate limits, and IP bypass header
+effectiveness across nine common header variants.
+
+.TP
+.B Anti-Automation Stack Mapping
+Detects WAFs, bot management platforms, fingerprinting libraries, and
+security header gaps by inspecting response headers, cookies, and scripts.
+
+.SH OPTIONS
+.TP
+.BI "\-u " URL ", \-\-url " URL
+Target URL. Required. Must include scheme (https:// or http://).
+
+.TP
+.BI "\-\-modules " module...
+Modules to run. Space-separated. Choices: detect, resilience, ratelimit,
+antibot. Default: all four.
+
+.TP
+.B \-\-full
+Run all modules with extended checks. Equivalent to specifying all four
+modules explicitly.
+
+.TP
+.BI "\-\-output " FILE
+Save a JSON report of all findings to FILE.
+
+.TP
+.BI "\-\-proxy " URL
+Route all requests through a proxy. Compatible with Burp Suite, Caido,
+and OWASP ZAP.
+.br
+Example: http://127.0.0.1:8080
+
+.TP
+.BI "\-\-delay " SECS
+Delay in seconds between requests. Default: 1.0. Lower values increase
+speed but may trigger rate limiting on the target.
+
+.TP
+.BI "\-\-timeout " SECS
+Request timeout in seconds. Default: 10.
+
+.TP
+.BI "\-\-ratelimit\-requests " N
+Number of rapid requests to send during rate limit probing. Default: 10.
+Increase for deeper analysis.
+
+.TP
+.BI "\-\-user\-agent " UA
+Custom User-Agent string to use for all requests.
+
+.TP
+.B \-v ", " \-\-verbose
+Verbose output. Shows individual pattern matches, script sources, and
+per-request status codes.
+
+.TP
+.B \-\-no\-banner
+Suppress the ASCII banner.
+
+.SH EXAMPLES
+.TP
+Full scan against a login page:
+.B captcharecon \-u https://target.com/login
+
+.TP
+Run only fingerprinting and anti-bot mapping:
+.B captcharecon \-u https://target.com/login \-\-modules detect antibot
+
+.TP
+Route through Burp Suite on port 8080:
+.B captcharecon \-u https://target.com/login \-\-proxy http://127.0.0.1:8080
+
+.TP
+Deep rate limit probe with 30 requests:
+.B captcharecon \-u https://target.com/login \-\-ratelimit\-requests 30 \-\-delay 0.2
+
+.TP
+Save JSON report:
+.B captcharecon \-u https://target.com/login \-\-output report.json
+
+.TP
+Full verbose scan:
+.B captcharecon \-u https://target.com/login \-\-full \-v \-\-output findings.json
+
+.SH MODULES
+
+.SS detect
+Fingerprints CAPTCHA providers by analysing HTML, script sources, and
+inline JavaScript. Does not interact with or trigger the CAPTCHA.
+
+Detects: reCAPTCHA v2/v3, hCaptcha, Cloudflare Turnstile, FunCaptcha /
+Arkose Labs, GeeTest, KeyCAPTCHA, math/text CAPTCHAs, audio CAPTCHAs.
+
+Also extracts exposed sitekeys from HTML source.
+
+.SS resilience
+Tests the server-side implementation of CAPTCHA, not the CAPTCHA itself.
+
+Checks: missing CAPTCHA response field, empty token submission, field
+removal, low-entropy token patterns, honeypot field detection.
+
+.SS ratelimit
+Maps rate limiting and throttling behaviour.
+
+Checks: rate limit headers (X-RateLimit-*, Retry-After), hard limit
+detection (HTTP 429), soft throttle via timing analysis, IP bypass
+headers (X-Forwarded-For, X-Real-IP, CF-Connecting-IP, True-Client-IP,
+X-Originating-IP, X-Remote-IP, X-Client-IP, Forwarded).
+
+.SS antibot
+Fingerprints the full defensive stack from response headers, cookies,
+and script sources.
+
+WAF / CDN: Cloudflare, Akamai, AWS WAF/CloudFront, Imperva Incapsula,
+F5 BIG-IP ASM, ModSecurity, Sucuri.
+
+Bot Management: DataDome, PerimeterX/HUMAN, Cloudflare Bot Management,
+Kasada, Akamai Bot Manager, Radware, Shape Security/F5.
+
+Fingerprinting Libraries: FingerprintJS, ThreatMetrix, Sift Science,
+Mouseflow, Hotjar, FullStory.
+
+Security Headers: CSP, HSTS, X-Frame-Options, X-Content-Type-Options,
+Referrer-Policy, Permissions-Policy.
+
+.SH OUTPUT
+Results are displayed in formatted tables in the terminal with
+colour-coded severity (CRITICAL, HIGH, MEDIUM, LOW, INFO).
+
+A final summary table consolidates findings across all modules with
+prioritised action items for the pentest report.
+
+JSON output (via \-\-output) follows this structure:
+
+.RS
+{
+  "tool": "CaptchaRecon",
+  "version": "1.0.0",
+  "timestamp": "ISO-8601",
+  "target": "URL",
+  "modules": { "detect": {...}, "resilience": {...}, ... }
+}
+.RE
+
+.SH PROXY INTEGRATION
+CaptchaRecon works with any intercepting proxy. Pass the proxy URL with
+\-\-proxy. When targeting HTTPS through Burp Suite or Caido, ensure the
+proxy CA certificate is installed in the system trust store, or use the
+proxy's built-in browser to generate traffic separately.
+
+.SH ETHICAL USE
+This tool is for authorised penetration testing and security research only.
+
+It does NOT solve, bypass, or automate CAPTCHA interaction. It does NOT
+perform credential stuffing, account takeover, or token replay.
+
+Running this tool against systems without explicit written authorisation
+may violate the Computer Fraud and Abuse Act (CFAA), the Computer Misuse
+Act, and equivalent legislation in other jurisdictions.
+
+The ethics acknowledgement prompt at startup is mandatory and cannot be
+suppressed.
+
+.SH OPEN-SOURCE DEPENDENCIES
+All integrated libraries are free and open-source:
+
+.RS
+requests       Apache 2.0    HTTP library (kennethreitz/requests)
+beautifulsoup4 MIT           HTML parsing (waylan/beautifulsoup)
+rich           MIT           Terminal UI (Textualize/rich)
+urllib3        MIT           HTTP client (urllib3/urllib3)
+lxml           BSD           XML/HTML parser (lxml/lxml)
+certifi        MPL 2.0       CA certificates (certifi/python-certifi)
+.RE
+
+.SH FILES
+.TP
+.I /etc/captcharecon/captcharecon.conf
+System-wide configuration file.
+
+.TP
+.I /opt/captcharecon/
+Installation directory.
+
+.TP
+.I /var/log/captcharecon_install.log
+Installer log file.
+
+.SH BUGS
+Report bugs at: https://github.com/yourusername/captcharecon/issues
+
+.SH AUTHOR
+Written for the security community. Contributions welcome via GitHub.
+
+.SH LICENSE
+GPL v3 — Free and open-source forever.
+See https://www.gnu.org/licenses/gpl-3.0.html
+
+.SH SEE ALSO
+.BR nmap (1),
+.BR curl (1),
+.BR dig (1),
+.BR burpsuite (1)
